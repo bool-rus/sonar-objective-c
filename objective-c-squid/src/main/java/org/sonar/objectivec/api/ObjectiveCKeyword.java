@@ -75,28 +75,17 @@ public enum ObjectiveCKeyword implements TokenType {
     // retain is defined in property modifiers
     // property modifiers
 
-    READWRITE("readwrite"),
-    READONLY("readonly"),
     ASSIGN("assign"),
-    RETAIN("retain"),
-    COPY("copy"),
     ATOMIC("atomic"),
+    COPY("copy"),
+    GETTER("getter"),
     NONATOMIC("nonatomic"),
+    READONLY("readonly"),
+    READWRITE("readwrite"),
+    RETAIN("retain"),
+    SETTER("setter"),
     STRONG("strong"),
     WEAK("weak"),
-
-    // preprocessor directives
-
-    HASH_IMPORT("#import"),
-    HASH_INCLUDE("#include"),
-    HASH_PRAGMA("#pragma"),
-    HASH_DEFINE("#define"),
-    HASH_UNDEF("#undef"),
-    HASH_IF("#if"),
-    HASH_IFDEF("#ifdef"),
-    HASH_IFNDEF("#ifndef"),
-    HASH_ELSE("#else"),
-    HASH_ENDIF("#endif"),
 
     // keywords from c
 

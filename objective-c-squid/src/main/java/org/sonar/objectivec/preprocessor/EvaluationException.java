@@ -17,43 +17,16 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-package org.sonar.objectivec.api;
+package org.sonar.objectivec.preprocessor;
 
-import org.sonar.squidbridge.measures.CalculatedMetricFormula;
-import org.sonar.squidbridge.measures.MetricDef;
+public class EvaluationException extends RuntimeException {
+    private String why;
 
-public enum ObjectiveCMetric implements MetricDef {
-    LINES,
-    LINES_OF_CODE,
-    FILES,
-    COMMENT_LINES,
-    CLASSES,
-    FUNCTIONS,
-    STATEMENTS,
-    COMPLEXITY;
-
-    @Override
-    public String getName() {
-        return name();
+    public EvaluationException(String why) {
+        this.why = why;
     }
 
-    @Override
-    public boolean isCalculatedMetric() {
-        return false;
-    }
-
-    @Override
-    public boolean aggregateIfThereIsAlreadyAValue() {
-        return true;
-    }
-
-    @Override
-    public boolean isThereAggregationFormula() {
-        return true;
-    }
-
-    @Override
-    public CalculatedMetricFormula getCalculatedMetricFormula() {
-        return null;
+    public String toString() {
+        return why;
     }
 }

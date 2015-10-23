@@ -19,21 +19,32 @@
  */
 package org.sonar.objectivec;
 
+import com.sonar.sslr.api.AstNode;
+import com.sonar.sslr.api.AstNodeType;
 import com.sonar.sslr.api.Grammar;
 import com.sonar.sslr.impl.Parser;
+import org.sonar.objectivec.api.ObjectiveCGrammar;
+import org.sonar.objectivec.api.ObjectiveCKeyword;
 import org.sonar.objectivec.api.ObjectiveCMetric;
+import org.sonar.objectivec.api.ObjectiveCPunctuator;
 import org.sonar.objectivec.highlighter.SonarComponents;
 import org.sonar.objectivec.highlighter.SyntaxHighlighterVisitor;
 import org.sonar.objectivec.parser.ObjectiveCParser;
 import org.sonar.squidbridge.AstScanner;
 import org.sonar.squidbridge.CommentAnalyser;
+import org.sonar.squidbridge.SourceCodeBuilderCallback;
+import org.sonar.squidbridge.SourceCodeBuilderVisitor;
 import org.sonar.squidbridge.SquidAstVisitor;
 import org.sonar.squidbridge.SquidAstVisitorContextImpl;
+import org.sonar.squidbridge.api.SourceClass;
 import org.sonar.squidbridge.api.SourceCode;
 import org.sonar.squidbridge.api.SourceFile;
+import org.sonar.squidbridge.api.SourceFunction;
 import org.sonar.squidbridge.api.SourceProject;
 import org.sonar.squidbridge.indexer.QueryByType;
 import org.sonar.squidbridge.metrics.CommentsVisitor;
+import org.sonar.squidbridge.metrics.ComplexityVisitor;
+import org.sonar.squidbridge.metrics.CounterVisitor;
 import org.sonar.squidbridge.metrics.LinesOfCodeVisitor;
 import org.sonar.squidbridge.metrics.LinesVisitor;
 
@@ -68,12 +79,15 @@ public class ObjectiveCAstScanner {
     public static AstScanner<Grammar> create(ObjectiveCConfiguration conf,
             @Nullable SonarComponents sonarComponents, SquidAstVisitor<Grammar>... visitors) {
         final SquidAstVisitorContextImpl<Grammar> context = new SquidAstVisitorContextImpl<>(new SourceProject("Objective-C Project"));
-        final Parser<Grammar> parser = ObjectiveCParser.create(conf);
+        final Parser<Grammar> parser = ObjectiveCParser.create(context, conf);
 
         AstScanner.Builder<Grammar> builder = AstScanner.builder(context).setBaseParser(parser);
 
         /* Metrics */
         builder.withMetrics(ObjectiveCMetric.values());
+
+        /* Files */
+        builder.setFilesMetric(ObjectiveCMetric.FILES);
 
         /* Comments */
         builder.setCommentAnalyser(
@@ -94,15 +108,75 @@ public class ObjectiveCAstScanner {
                     }
                 });
 
-        /* Files */
-        builder.setFilesMetric(ObjectiveCMetric.FILES);
+        /* Functions */
+        builder.withSquidAstVisitor(new SourceCodeBuilderVisitor<>(new SourceCodeBuilderCallback() {
+            private int seq = 0;
+
+            @Override
+            public SourceCode createSourceCode(SourceCode parentSourceCode, AstNode astNode) {
+                seq++;
+                SourceFunction function = new SourceFunction("function:" + seq);
+                function.setStartAtLine(astNode.getTokenLine());
+                return function;
+            }
+        }, ObjectiveCGrammar.FUNCTION_DEFINITION, ObjectiveCGrammar.OBJC_FUNCTION_DEFINITION));
+
+        builder.withSquidAstVisitor(CounterVisitor.builder()
+                .setMetricDef(ObjectiveCMetric.FUNCTIONS)
+                .subscribeTo(ObjectiveCGrammar.FUNCTION_DEFINITION, ObjectiveCGrammar.OBJC_FUNCTION_DEFINITION)
+                .build());
+
+        /* Classes */
+        builder.withSquidAstVisitor(new SourceCodeBuilderVisitor<>(new SourceCodeBuilderCallback() {
+            private int seq = 0;
+
+            @Override
+            public SourceCode createSourceCode(SourceCode parentSourceCode, AstNode astNode) {
+                seq++;
+                SourceClass cls = new SourceClass("class:" + seq);
+                cls.setStartAtLine(astNode.getTokenLine());
+                return cls;
+            }
+        }, ObjectiveCGrammar.IMPLEMENTATION_DEFINITION, ObjectiveCGrammar.INTERFACE_DEFINITION));
+
+        builder.withSquidAstVisitor(CounterVisitor.builder()
+                .setMetricDef(ObjectiveCMetric.CLASSES)
+                .subscribeTo(ObjectiveCGrammar.IMPLEMENTATION_DEFINITION, ObjectiveCGrammar.INTERFACE_DEFINITION)
+                .build());
 
         /* Metrics */
         builder.withSquidAstVisitor(new LinesVisitor<>(ObjectiveCMetric.LINES));
         builder.withSquidAstVisitor(new LinesOfCodeVisitor<>(ObjectiveCMetric.LINES_OF_CODE));
         builder.withSquidAstVisitor(CommentsVisitor.builder().withCommentMetric(ObjectiveCMetric.COMMENT_LINES)
                 .withNoSonar(true)
-                .withIgnoreHeaderComment(conf.getIgnoreHeaderComments())
+                .withIgnoreHeaderComment(conf.isIgnoreHeaderComments())
+                .build());
+
+        /* Statements */
+        builder.withSquidAstVisitor(CounterVisitor.builder()
+                .setMetricDef(ObjectiveCMetric.STATEMENTS)
+                .subscribeTo(ObjectiveCGrammar.STATEMENT)
+                .build());
+
+        AstNodeType[] complexityAstNodeType = new AstNodeType[]{
+                ObjectiveCGrammar.FUNCTION_DEFINITION,
+                ObjectiveCGrammar.OBJC_FUNCTION_DEFINITION,
+
+                ObjectiveCKeyword.IF,
+                ObjectiveCKeyword.FOR,
+                ObjectiveCKeyword.WHILE,
+                ObjectiveCKeyword.AT_CATCH,
+                ObjectiveCKeyword.CASE,
+                ObjectiveCKeyword.DEFAULT,
+
+                ObjectiveCPunctuator.AND,
+                ObjectiveCPunctuator.OR,
+                ObjectiveCPunctuator.QUEST
+        };
+
+        builder.withSquidAstVisitor(ComplexityVisitor.builder()
+                .setMetricDef(ObjectiveCMetric.COMPLEXITY)
+                .subscribeTo(complexityAstNodeType)
                 .build());
 
         /* Syntax highlighter */
@@ -110,8 +184,11 @@ public class ObjectiveCAstScanner {
             builder.withSquidAstVisitor(new SyntaxHighlighterVisitor(sonarComponents, conf.getCharset()));
         }
 
-        /* External visitors */
+        /* External visitors (typically Check ones) */
         for (SquidAstVisitor<Grammar> visitor : visitors) {
+            if (visitor instanceof CharsetAwareVisitor) {
+                ((CharsetAwareVisitor) visitor).setCharset(conf.getCharset());
+            }
             builder.withSquidAstVisitor(visitor);
         }
 

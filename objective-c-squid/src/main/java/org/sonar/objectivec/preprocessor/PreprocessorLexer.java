@@ -17,7 +17,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-package org.sonar.objectivec.lexer;
+package org.sonar.objectivec.preprocessor;
 
 import com.sonar.sslr.api.GenericTokenType;
 import com.sonar.sslr.api.Grammar;
@@ -28,10 +28,11 @@ import com.sonar.sslr.impl.channel.PunctuatorChannel;
 import org.sonar.objectivec.ObjectiveCConfiguration;
 import org.sonar.objectivec.api.ObjectiveCKeyword;
 import org.sonar.objectivec.api.ObjectiveCPunctuator;
-import org.sonar.objectivec.preprocessor.ObjectiveCPreprocessor;
+import org.sonar.objectivec.lexer.BackslashChannel;
+import org.sonar.objectivec.lexer.CharacterLiteralsChannel;
+import org.sonar.objectivec.lexer.PreprocessorChannel;
+import org.sonar.objectivec.lexer.StringLiteralsChannel;
 import org.sonar.squidbridge.SquidAstVisitorContext;
-import org.sonar.squidbridge.SquidAstVisitorContextImpl;
-import org.sonar.squidbridge.api.SourceProject;
 
 import static com.sonar.sslr.impl.channel.RegexpChannelBuilder.commentRegexp;
 import static com.sonar.sslr.impl.channel.RegexpChannelBuilder.regexp;
@@ -40,7 +41,7 @@ import static org.sonar.objectivec.api.ObjectiveCTokenType.FLOAT_LITERAL;
 import static org.sonar.objectivec.api.ObjectiveCTokenType.INTEGER_LITERAL;
 import static org.sonar.objectivec.api.ObjectiveCTokenType.LONG_LITERAL;
 
-public class ObjectiveCLexer {
+public class PreprocessorLexer {
     private static final String EXP_REGEXP = "(?:[Ee][+-]?+[0-9_]++)";
     private static final String BINARY_EXP_REGEXP = "(?:[Pp][+-]?+[0-9_]++)";
     private static final String FLOATING_LITERAL_WITHOUT_SUFFIX_REGEXP = "(?:" +
@@ -61,8 +62,7 @@ public class ObjectiveCLexer {
             "|" + "[0-9][0-9_]*+" +
             ")";
 
-    private ObjectiveCLexer() {
-        // prevents outside instantiation
+    private PreprocessorLexer() {
     }
 
     public static Lexer create() {
@@ -70,10 +70,6 @@ public class ObjectiveCLexer {
     }
 
     public static Lexer create(ObjectiveCConfiguration conf) {
-        return create(new SquidAstVisitorContextImpl<>(new SourceProject("")), conf);
-    }
-
-    public static Lexer create(SquidAstVisitorContext<Grammar> context, ObjectiveCConfiguration conf) {
         return Lexer.builder()
                 .withCharset(conf.getCharset())
                 .withFailIfNoChannelToConsumeOneCharacter(true)
@@ -88,9 +84,6 @@ public class ObjectiveCLexer {
                 /* Backslash at the end of the line: just throw away */
                 .withChannel(new BackslashChannel())
 
-                /* Preprocessor directives */
-                .withChannel(new PreprocessorChannel())
-
                 /* Character literals */
                 .withChannel(new CharacterLiteralsChannel())
 
@@ -104,14 +97,11 @@ public class ObjectiveCLexer {
                 .withChannel(regexp(INTEGER_LITERAL, INTEGER_LITERAL_REGEXP))
 
                 /* Identifiers, keywords, and punctuators */
-                .withChannel(new IdentifierAndKeywordChannel("@?[a-zA-Z]([a-zA-Z0-9_]*[a-zA-Z0-9])?+((\\s+)?\\*)?", true, ObjectiveCKeyword.values()))
+                .withChannel(new IdentifierAndKeywordChannel("[#@]?[a-zA-Z]([a-zA-Z0-9_]*[a-zA-Z0-9])?+( \\*)?", true, PreprocessorKeyword.values()))
                 .withChannel(new PunctuatorChannel(ObjectiveCPunctuator.values()))
 
                 /* All other tokens -- must be last channel */
                 .withChannel(regexp(GenericTokenType.IDENTIFIER, "[^\r\n\\s/]+"))
-
-                /* Preprocessors */
-                .withPreprocessor(new ObjectiveCPreprocessor(context, conf))
 
                 .build();
     }

@@ -24,21 +24,30 @@ import com.sonar.sslr.impl.Parser;
 import org.sonar.objectivec.ObjectiveCConfiguration;
 import org.sonar.objectivec.api.ObjectiveCGrammar;
 import org.sonar.objectivec.lexer.ObjectiveCLexer;
+import org.sonar.squidbridge.SquidAstVisitorContext;
+import org.sonar.squidbridge.SquidAstVisitorContextImpl;
+import org.sonar.squidbridge.api.SourceProject;
 
 public class ObjectiveCParser {
-
     private ObjectiveCParser() {
         // Prevent outside instantiation
     }
 
     public static Parser<Grammar> create() {
-        return create(new ObjectiveCConfiguration());
+        return create(new SquidAstVisitorContextImpl<>(new SourceProject("")), new ObjectiveCConfiguration());
     }
 
     public static Parser<Grammar> create(ObjectiveCConfiguration conf) {
-        return Parser.builder(ObjectiveCGrammar.create())
-                .withLexer(ObjectiveCLexer.create(conf))
-                .build();
+        return create(new SquidAstVisitorContextImpl<>(new SourceProject("")), conf);
     }
 
+    public static Parser<Grammar> create(SquidAstVisitorContext<Grammar> context) {
+        return create(context, new ObjectiveCConfiguration());
+    }
+
+    public static Parser<Grammar> create(SquidAstVisitorContext<Grammar> context, ObjectiveCConfiguration conf) {
+        return Parser.builder(ObjectiveCGrammar.create())
+                .withLexer(ObjectiveCLexer.create(context, conf))
+                .build();
+    }
 }

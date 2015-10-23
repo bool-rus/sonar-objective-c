@@ -1,0 +1,451 @@
+/*
+ * SonarQube Objective-C (Community) :: Squid
+ * Copyright (C) 2012-2016 OCTO Technology, Backelite, and contributors
+ * mailto:sonarqube@googlegroups.com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+package org.sonar.objectivec.preprocessor;
+
+import com.sonar.sslr.api.AstNode;
+import com.sonar.sslr.api.AstNodeType;
+import com.sonar.sslr.api.Grammar;
+import com.sonar.sslr.api.Token;
+import com.sonar.sslr.impl.Parser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.sonar.objectivec.ObjectiveCConfiguration;
+
+import java.math.BigInteger;
+import java.util.List;
+
+public final class ExpressionEvaluator {
+    private static final BigInteger UINT64_MAX = new BigInteger("FFFFFFFFFFFFFFFF", 16);
+    public static final Logger LOGGER = LoggerFactory.getLogger(ExpressionEvaluator.class);
+
+    private Parser<Grammar> parser;
+    private ObjectiveCPreprocessor preprocessor;
+
+    public ExpressionEvaluator(ObjectiveCConfiguration conf, ObjectiveCPreprocessor preprocessor) {
+        parser = PreprocessorParser.create(conf);
+
+        this.preprocessor = preprocessor;
+    }
+
+    public boolean eval(String constExpr) {
+        return evalToInt(constExpr, null).compareTo(BigInteger.ZERO) != 0;
+    }
+
+    public boolean eval(AstNode constExpr) {
+        return evalToInt(constExpr).compareTo(BigInteger.ZERO) != 0;
+    }
+
+    private BigInteger evalToInt(String constExpr, AstNode exprAst) {
+        AstNode constExprAst = null;
+        try {
+            constExprAst = parser.parse(constExpr);
+        } catch (com.sonar.sslr.api.RecognitionException re) {
+            if (exprAst != null) {
+                LOGGER.warn("Error evaluating expression '{}' for AstExp '{}', assuming 0", constExpr, exprAst.getToken());
+            } else {
+                LOGGER.warn("Error evaluating expression '{}', assuming 0", constExpr);
+            }
+
+            return BigInteger.ZERO;
+        }
+
+        return evalToInt(constExprAst);
+    }
+
+    private BigInteger evalToInt(AstNode exprAst) {
+        LOGGER.trace("Evaluating expression: {}", exprAst);
+
+        int noChildren = exprAst.getNumberOfChildren();
+        if (noChildren == 0) {
+            return evalLeaf(exprAst);
+        } else if (noChildren == 1) {
+            return evalOneChildAst(exprAst);
+        }
+
+        return evalComplexAst(exprAst);
+    }
+
+    private BigInteger evalLeaf(AstNode exprAst) {
+        // Evaluation of leafs
+        //
+        String nodeType = exprAst.getName();
+        if ("NUMBER".equals(nodeType)) {
+            return evalNumber(exprAst.getTokenValue());
+        } else if ("CHARACTER".equals(nodeType)) {
+            return evalCharacter(exprAst.getTokenValue());
+        } else if ("IDENTIFIER".equals(nodeType)) {
+            String value = preprocessor.valueOf(exprAst.getTokenValue());
+            return value == null ? BigInteger.ZERO : evalToInt(value, exprAst);
+        } else {
+            throw new EvaluationException("Unknown expression type '" + nodeType + "'");
+        }
+    }
+
+    private BigInteger evalOneChildAst(AstNode exprAst) {
+        // Evaluation of booleans and 'pass-through's
+        //
+        AstNodeType nodeType = exprAst.getType();
+        if (nodeType == PreprocessorGrammar.BOOL) {
+            return evalBool(exprAst.getTokenValue());
+        }
+        return evalToInt(exprAst.getChild(0));
+    }
+
+    private BigInteger evalComplexAst(AstNode exprAst) {
+        // More complex expressions with more than one child
+        //
+        AstNodeType nodeType = exprAst.getType();
+        if (nodeType == PreprocessorGrammar.UNARY_EXPRESSION) {
+            return evalUnaryExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.CONDITIONAL_EXPRESSION) {
+            return evalConditionalExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.LOGICAL_OR_EXPRESSION) {
+            return evalLogicalOrExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.LOGICAL_AND_EXPRESSION) {
+            return evalLogicalAndExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.INCLUSIVE_OR_EXPRESSION) {
+            return evalInclusiveOrExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.EXCLUSIVE_OR_EXPRESSION) {
+            return evalExclusiveOrExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.AND_EXPRESSION) {
+            return evalAndExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.EQUALITY_EXPRESSION) {
+            return evalEqualityExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.RELATIONAL_EXPRESSION) {
+            return evalRelationalExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.SHIFT_EXPRESSION) {
+            return evalShiftExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.ADDITIVE_EXPRESSION) {
+            return evalAdditiveExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.MULTIPLICATIVE_EXPRESSION) {
+            return evalMultiplicativeExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.PRIMARY_EXPRESSION) {
+            return evalPrimaryExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.DEFINED_EXPRESSION) {
+            return evalDefinedExpression(exprAst);
+        } else if (nodeType == PreprocessorGrammar.FUNCTIONLIKE_MACRO) {
+            return evalFunctionlikeMacro(exprAst);
+        } else {
+            throw new EvaluationException("Unknown expression type '" + nodeType + "'");
+        }
+    }
+
+    // ///////////////// Primitives //////////////////////
+    BigInteger evalBool(String boolValue) {
+        return "true".equalsIgnoreCase(boolValue) ? BigInteger.ONE : BigInteger.ZERO;
+    }
+
+    BigInteger evalNumber(String intValue) {
+        // the if expressions arent allowed to contain floats
+        BigInteger number;
+        try {
+            number = decode(intValue);
+        } catch (java.lang.NumberFormatException nfe) {
+            LOGGER.warn("Cannot decode the number '{}' falling back to value '{}' instead", intValue, BigInteger.ONE);
+            number = BigInteger.ONE;
+        }
+
+        return number;
+    }
+
+    BigInteger evalCharacter(String charValue) {
+        // TODO: replace this simplification by something more sane
+        return "'\0'".equals(charValue) ? BigInteger.ZERO : BigInteger.ONE;
+    }
+
+    // ////////////// logical expressions ///////////////////////////
+    BigInteger evalLogicalOrExpression(AstNode exprAst) {
+        int noChildren = exprAst.getNumberOfChildren();
+        boolean result = eval(exprAst.getChild(0));
+        for (int i = 2; i < noChildren && !result; i += 2) {
+            AstNode operand = exprAst.getChild(i);
+            result = result || eval(operand);
+        }
+
+        return result ? BigInteger.ONE : BigInteger.ZERO;
+    }
+
+    BigInteger evalLogicalAndExpression(AstNode exprAst) {
+        int noChildren = exprAst.getNumberOfChildren();
+        boolean result = eval(exprAst.getChild(0));
+        for (int i = 2; i < noChildren && result; i += 2) {
+            AstNode operand = exprAst.getChild(i);
+            result = eval(operand);
+        }
+
+        return result ? BigInteger.ONE : BigInteger.ZERO;
+    }
+
+    BigInteger evalEqualityExpression(AstNode exprAst) {
+        String operator = exprAst.getChild(1).getTokenValue();
+        AstNode lhs = exprAst.getChild(0);
+        AstNode rhs = exprAst.getChild(2);
+        boolean result;
+        if ("==".equals(operator)) {
+            result = evalToInt(lhs).compareTo(evalToInt(rhs)) == 0;
+        } else if ("!=".equals(operator)) {
+            result = evalToInt(lhs).compareTo(evalToInt(rhs)) != 0;
+        } else {
+            throw new EvaluationException("Unknown equality operator '" + operator + "'");
+        }
+
+        int noChildren = exprAst.getNumberOfChildren();
+        for (int i = 4; i < noChildren; i += 2) {
+            operator = exprAst.getChild(i - 1).getTokenValue();
+            rhs = exprAst.getChild(i);
+            if ("==".equals(operator)) {
+                result = result == eval(rhs);
+            } else if ("!=".equals(operator)) {
+                result = result != eval(rhs);
+            } else {
+                throw new EvaluationException("Unknown equality operator '" + operator + "'");
+            }
+        }
+
+        return result ? BigInteger.ONE : BigInteger.ZERO;
+    }
+
+    BigInteger evalRelationalExpression(AstNode exprAst) {
+        String operator = exprAst.getChild(1).getTokenValue();
+        AstNode lhs = exprAst.getChild(0);
+        AstNode rhs = exprAst.getChild(2);
+        boolean result;
+        if ("<".equals(operator)) {
+            result = evalToInt(lhs).compareTo(evalToInt(rhs)) < 0;
+        } else if (">".equals(operator)) {
+            result = evalToInt(lhs).compareTo(evalToInt(rhs)) > 0;
+        } else if ("<=".equals(operator)) {
+            result = evalToInt(lhs).compareTo(evalToInt(rhs)) <= 0;
+        } else if (">=".equals(operator)) {
+            result = evalToInt(lhs).compareTo(evalToInt(rhs)) >= 0;
+        } else {
+            throw new EvaluationException("Unknown relational operator '" + operator + "'");
+        }
+
+        BigInteger resultAsInt;
+        int noChildren = exprAst.getNumberOfChildren();
+        for (int i = 4; i < noChildren; i += 2) {
+            operator = exprAst.getChild(i - 1).getTokenValue();
+            rhs = exprAst.getChild(i);
+
+            resultAsInt = result ? BigInteger.ONE : BigInteger.ZERO;
+            if ("<".equals(operator)) {
+                result = resultAsInt.compareTo(evalToInt(rhs)) < 0;
+            } else if (">".equals(operator)) {
+                result = resultAsInt.compareTo(evalToInt(rhs)) > 0;
+            } else if ("<=".equals(operator)) {
+                result = resultAsInt.compareTo(evalToInt(rhs)) <= 0;
+            } else if (">=".equals(operator)) {
+                result = resultAsInt.compareTo(evalToInt(rhs)) >= 0;
+            } else {
+                throw new EvaluationException("Unknown relational operator '" + operator + "'");
+            }
+        }
+
+        return result ? BigInteger.ONE : BigInteger.ZERO;
+    }
+
+    // ///////////////// bitwise expressions ///////////////////////
+    BigInteger evalAndExpression(AstNode exprAst) {
+        int noChildren = exprAst.getNumberOfChildren();
+        BigInteger result = evalToInt(exprAst.getChild(0));
+        for (int i = 2; i < noChildren; i += 2) {
+            AstNode operand = exprAst.getChild(i);
+            result = result.and(evalToInt(operand));
+        }
+
+        return result;
+    }
+
+    BigInteger evalInclusiveOrExpression(AstNode exprAst) {
+        int noChildren = exprAst.getNumberOfChildren();
+        BigInteger result = evalToInt(exprAst.getChild(0));
+        for (int i = 2; i < noChildren; i += 2) {
+            AstNode operand = exprAst.getChild(i);
+            result = result.or(evalToInt(operand));
+        }
+
+        return result;
+    }
+
+    BigInteger evalExclusiveOrExpression(AstNode exprAst) {
+        int noChildren = exprAst.getNumberOfChildren();
+        BigInteger result = evalToInt(exprAst.getChild(0));
+        for (int i = 2; i < noChildren; i += 2) {
+            AstNode operand = exprAst.getChild(i);
+            result = result.xor(evalToInt(operand));
+        }
+
+        return result;
+    }
+
+    // ///////////////// other ... ///////////////////
+    BigInteger evalUnaryExpression(AstNode exprAst) {
+        // only 'unary-operator cast-expression' production is allowed in #if-context
+
+        String operator = exprAst.getChild(0).getTokenValue();
+        AstNode operand = exprAst.getChild(1);
+        if ("+".equals(operator)) {
+            return evalToInt(operand);
+        } else if ("-".equals(operator)) {
+            return evalToInt(operand).negate();
+        } else if ("!".equals(operator)) {
+            boolean result = !eval(operand);
+            return result ? BigInteger.ONE : BigInteger.ZERO;
+        } else if ("~".equals(operator)) {
+            //todo: need more information (signed/unsigned, data type length) to invert bits in all cases correct
+            return evalToInt(operand).not().and(UINT64_MAX);
+        } else {
+            throw new EvaluationException("Unknown unary operator  '" + operator + "'");
+        }
+    }
+
+    BigInteger evalShiftExpression(AstNode exprAst) {
+        String operator;
+        AstNode rhs;
+        BigInteger result = evalToInt(exprAst.getChild(0));
+        int noChildren = exprAst.getNumberOfChildren();
+
+        for (int i = 2; i < noChildren; i += 2) {
+            operator = exprAst.getChild(i - 1).getTokenValue();
+            rhs = exprAst.getChild(i);
+
+            if ("<<".equals(operator)) {
+                //todo: limit to UINT64_MAX?
+                result = result.shiftLeft(evalToInt(rhs).intValue()).and(UINT64_MAX);
+            } else if (">>".equals(operator)) {
+                result = result.shiftRight(evalToInt(rhs).intValue());
+            } else {
+                throw new EvaluationException("Unknown shift operator '" + operator + "'");
+            }
+        }
+
+        return result;
+    }
+
+    BigInteger evalAdditiveExpression(AstNode exprAst) {
+        String operator;
+        AstNode rhs;
+        BigInteger result = evalToInt(exprAst.getChild(0));
+        int noChildren = exprAst.getNumberOfChildren();
+
+        for (int i = 2; i < noChildren; i += 2) {
+            operator = exprAst.getChild(i - 1).getTokenValue();
+            rhs = exprAst.getChild(i);
+
+            if ("+".equals(operator)) {
+                result = result.add(evalToInt(rhs));
+            } else if ("-".equals(operator)) {
+                result = result.subtract(evalToInt(rhs));
+            } else {
+                throw new EvaluationException("Unknown additive operator '" + operator + "'");
+            }
+        }
+
+        return result;
+    }
+
+    BigInteger evalMultiplicativeExpression(AstNode exprAst) {
+        String operator;
+        AstNode rhs;
+        BigInteger result = evalToInt(exprAst.getChild(0));
+        int noChildren = exprAst.getNumberOfChildren();
+
+        for (int i = 2; i < noChildren; i += 2) {
+            operator = exprAst.getChild(i - 1).getTokenValue();
+            rhs = exprAst.getChild(i);
+
+            if ("*".equals(operator)) {
+                result = result.multiply(evalToInt(rhs));
+            } else if ("/".equals(operator)) {
+                result = result.divide(evalToInt(rhs));
+            } else if ("%".equals(operator)) {
+                result = result.mod(evalToInt(rhs));
+            } else {
+                throw new EvaluationException("Unknown multiplicative operator '" + operator + "'");
+            }
+        }
+
+        return result;
+    }
+
+    BigInteger evalConditionalExpression(AstNode exprAst) {
+        if (exprAst.getNumberOfChildren() == 5) {
+            AstNode decisionOperand = exprAst.getChild(0);
+            AstNode trueCaseOperand = exprAst.getChild(2);
+            AstNode falseCaseOperand = exprAst.getChild(4);
+            return eval(decisionOperand) ? evalToInt(trueCaseOperand) : evalToInt(falseCaseOperand);
+        } else {
+            AstNode decisionOperand = exprAst.getChild(0);
+            AstNode falseCaseOperand = exprAst.getChild(3);
+            BigInteger decision = evalToInt(decisionOperand);
+            return decision.compareTo(BigInteger.ZERO) != 0 ? decision : evalToInt(falseCaseOperand);
+        }
+    }
+
+    BigInteger evalPrimaryExpression(AstNode exprAst) {
+        // case "( expression )"
+        return evalToInt(exprAst.getChild(1));
+    }
+
+    BigInteger evalDefinedExpression(AstNode exprAst) {
+        int posOfMacroName = exprAst.getNumberOfChildren() == 2 ? 1 : 2;
+        String macroName = exprAst.getChild(posOfMacroName).getTokenValue();
+        String value = preprocessor.valueOf(macroName);
+
+        LOGGER.trace("expanding '{}' to '{}'", macroName, value);
+
+        return value == null ? BigInteger.ZERO : BigInteger.ONE;
+    }
+
+    BigInteger evalFunctionlikeMacro(AstNode exprAst) {
+        String macroName = exprAst.getChild(0).getTokenValue();
+        List<Token> tokens = exprAst.getTokens();
+        List<Token> restTokens = tokens.subList(1, tokens.size());
+        String value = preprocessor.expandFunctionLikeMacro(macroName, restTokens);
+
+        LOGGER.trace("expanding '{}' to '{}'", macroName, value);
+        if (value == null) {
+            LOGGER.warn("Undefined functionlike macro '{}' assuming 0", macroName);
+        }
+
+        return value == null ? BigInteger.ZERO : evalToInt(value, exprAst);
+    }
+
+    String stripSuffix(String number) {
+        return number.replaceAll("[LlUu]", "");
+    }
+
+    BigInteger decode(String number) {
+        int radix = 10;
+        if (number.length() > 2) {
+            if (number.charAt(0) == '0') {
+                if (number.charAt(1) == 'x' || number.charAt(1) == 'X') {
+                    radix = 16; // 0x...
+                    number = number.substring(2);
+                } else {
+                    radix = 8; // 0...
+                }
+            }
+        }
+
+        return new BigInteger(stripSuffix(number), radix);
+    }
+}

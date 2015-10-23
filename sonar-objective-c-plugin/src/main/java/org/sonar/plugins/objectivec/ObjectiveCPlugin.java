@@ -29,8 +29,6 @@ import org.sonar.plugins.objectivec.clang.ClangRulesDefinition;
 import org.sonar.plugins.objectivec.clang.ClangSensor;
 import org.sonar.plugins.objectivec.cobertura.CoberturaSensor;
 import org.sonar.plugins.objectivec.cpd.ObjectiveCCpdMapping;
-import org.sonar.plugins.objectivec.lizard.LizardRulesDefinition;
-import org.sonar.plugins.objectivec.lizard.LizardSensor;
 import org.sonar.plugins.objectivec.oclint.OCLintProfile;
 import org.sonar.plugins.objectivec.oclint.OCLintProfileImporter;
 import org.sonar.plugins.objectivec.oclint.OCLintRulesDefinition;
@@ -74,15 +72,6 @@ public class ObjectiveCPlugin extends SonarPlugin {
                 .name("Report path")
                 .description("Path (absolute or relative) to Cobertura XML report file.")
                 .subCategory("Cobertura")
-                .onQualifiers(Qualifiers.PROJECT)
-                .build());
-
-        extensions.add(LizardSensor.class);
-        extensions.add(LizardRulesDefinition.class);
-        extensions.add(PropertyDefinition.builder(LizardSensor.REPORT_PATH_KEY)
-                .name("Report path")
-                .description("Path (absolute or relative) to Lizard XML report file.")
-                .subCategory("Complexity")
                 .onQualifiers(Qualifiers.PROJECT)
                 .build());
 

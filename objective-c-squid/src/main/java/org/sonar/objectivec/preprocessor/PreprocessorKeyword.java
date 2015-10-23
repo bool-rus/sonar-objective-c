@@ -17,39 +17,53 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-package org.sonar.objectivec.api;
+package org.sonar.objectivec.preprocessor;
 
-import com.google.common.collect.ImmutableList;
 import com.sonar.sslr.api.AstNode;
 import com.sonar.sslr.api.TokenType;
 
-import java.util.List;
+public enum PreprocessorKeyword implements TokenType {
+    HASH_DEFINE("#define"),
+    HASH_ELIF("#elif"),
+    HASH_ELSE("#else"),
+    HASH_ENDIF("#endif"),
+    HASH_ERROR("#error"),
+    HASH_IF("#if"),
+    HASH_IFDEF("#ifdef"),
+    HASH_IFNDEF("#ifndef"),
+    HASH_IMPORT("#import"),
+    HASH_INCLUDE("#include"),
+    HASH_INCLUDE_NEXT("#include_next"),
+    HASH_LINE("#line"),
+    HASH_PRAGMA("#pragma"),
+    HASH_UNDEF("#undef"),
+    HASH_WARNING("#warning");
 
-public enum ObjectiveCTokenType implements TokenType {
-    CHARACTER_LITERAL,
-    DOUBLE_LITERAL,
-    FLOAT_LITERAL,
-    INTEGER_LITERAL,
-    LONG_LITERAL,
-    STRING_LITERAL,
-    PREPROCESSOR;
+    private final String value;
 
-    @Override
+    /*private*/ PreprocessorKeyword(String value) {
+        this.value = value;
+    }
+
     public String getName() {
         return name();
     }
 
-    @Override
     public String getValue() {
-        return name();
+        return value;
     }
 
-    @Override
     public boolean hasToBeSkippedFromAst(AstNode node) {
         return false;
     }
 
-    public static List numberLiterals() {
-        return ImmutableList.of(DOUBLE_LITERAL, FLOAT_LITERAL, INTEGER_LITERAL, LONG_LITERAL);
+    public static String[] keywordValues() {
+        PreprocessorKeyword[] keywordsEnum = PreprocessorKeyword.values();
+        String[] keywords = new String[keywordsEnum.length];
+        for (int i = 0; i < keywords.length; i++) {
+            keywords[i] = keywordsEnum[i].getValue();
+        }
+        return keywords;
     }
+
 }

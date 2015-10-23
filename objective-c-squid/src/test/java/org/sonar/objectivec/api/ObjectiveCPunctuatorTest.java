@@ -25,10 +25,8 @@ import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
 
 public class ObjectiveCPunctuatorTest {
-
     @Test
     public void test() {
         assertThat(ObjectiveCPunctuator.values().length, is(49));
     }
-
 }

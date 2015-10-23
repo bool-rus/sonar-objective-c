@@ -17,43 +17,26 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-package org.sonar.objectivec.api;
+package org.sonar.objectivec.preprocessor;
 
-import org.sonar.squidbridge.measures.CalculatedMetricFormula;
-import org.sonar.squidbridge.measures.MetricDef;
+import com.sonar.sslr.api.Grammar;
+import com.sonar.sslr.impl.Parser;
+import org.sonar.objectivec.ObjectiveCConfiguration;
 
-public enum ObjectiveCMetric implements MetricDef {
-    LINES,
-    LINES_OF_CODE,
-    FILES,
-    COMMENT_LINES,
-    CLASSES,
-    FUNCTIONS,
-    STATEMENTS,
-    COMPLEXITY;
+public class PreprocessorParser {
 
-    @Override
-    public String getName() {
-        return name();
+    private PreprocessorParser() {
+        // Prevent outside instantiation
     }
 
-    @Override
-    public boolean isCalculatedMetric() {
-        return false;
+    public static Parser<Grammar> create() {
+        return create(new ObjectiveCConfiguration());
     }
 
-    @Override
-    public boolean aggregateIfThereIsAlreadyAValue() {
-        return true;
+    public static Parser<Grammar> create(ObjectiveCConfiguration conf) {
+        return Parser.builder(PreprocessorGrammar.create())
+                .withLexer(PreprocessorLexer.create(conf))
+                .build();
     }
 
-    @Override
-    public boolean isThereAggregationFormula() {
-        return true;
-    }
-
-    @Override
-    public CalculatedMetricFormula getCalculatedMetricFormula() {
-        return null;
-    }
 }

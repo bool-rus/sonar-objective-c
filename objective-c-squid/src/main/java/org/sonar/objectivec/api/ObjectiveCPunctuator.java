@@ -23,74 +23,70 @@ import com.sonar.sslr.api.AstNode;
 import com.sonar.sslr.api.TokenType;
 
 public enum ObjectiveCPunctuator implements TokenType {
-
-    // these are really only c operators
-    // http://en.wikipedia.org/wiki/Operators_in_C_and_C%2B%2B
-
-    PLUSPLUS("++"),
-    PLUSEQ("+="),
+    // Basic arithmetic operators
     PLUS("+"),
-
-    MINUSMINUS("--"),
-    MINUSEQ("-="),
     MINUS("-"),
-
-    STAREQ("*="),
-    STAR("*"),
-
-    SLASHEQ("/="),
-    SLASH("/"),
-
-    LT("<"),
-    LTLT("<<"),
-    LTEQ("<="),
-    LTLTEQ("<<="),
-
-    GT(">"),
-    GTGT(">>"),
-    GTEQ(">="),
-    GTGTEQ(">>="),
-
+    MUL("*"),
+    DIV("/"),
+    MODULO("%"),
+    INC("++"),
+    DEC("--"),
     EQ("="),
+
+    // Comparison/relational operators
     EQEQ("=="),
+    NE("!="),
+    LT("<"),
+    GT(">"),
+    LTE("<="),
+    GTE(">="),
 
-    TILDE("~"),
+    // Logical operators
+    NOT("!"),
+    AND("&&"),
+    OR("||"),
 
-    EXCL("!"),
-    EXCLEQ("!="),
+    // Bitwise Operators
+    BW_NOT("~"),
+    BW_AND("&"),
+    BW_OR("|"),
+    BW_XOR("^"),
+    BW_LSHIFT("<<"),
+    BW_RSHIFT(">>"),
 
-    AMP("&"),
-    AMPAMP("&&"),
-    AMPEQ("&="),
-    AMPAMPEX("&&="),
+    // Compound assignment operators
+    PLUS_EQ("+="),
+    MINUS_EQ("-="),
+    MUL_EQ("*="),
+    DIV_EQ("/="),
+    MODULO_EQ("%="),
+    BW_AND_EQ("&="),
+    BW_OR_EQ("|="),
+    BW_XOR_EQ("^="),
+    BW_LSHIFT_EQ("<<="),
+    BW_RSHIFT_EQ(">>="),
 
-    BAR("|"),
-    BARBAR("||"),
-    BAREQ("|="),
-    BARBAREQ("||="),
+    // Member and pointer operators
+    ARROW("->"), // ARROW?
+    DOT("."), // DOT?
+    DOT_STAR(".*"), // DOT_MUL?
+    ARROW_STAR("->*"), // ARROW_MUL?
 
-    CARETEQ("^="),
-    CARET("^"),
-
-    PERCENT("%"),
-    PERCENTEQ("%="),
-
-    LCURLYBRACE("{"),
-    RCURLYBRACE("}"),
-    LPARENTHESIS("("),
-    RPARENTHESIS(")"),
-    LBRACKET("["),
-    RBRACKET("]"),
-
-    QUESTION("?"),
-    COLON(":"),
+    // Delimiters
     SEMICOLON(";"),
+    COLON(":"),
     COMMA(","),
+    DOUBLECOLON("::"),
+    PAREN_L("("),
+    PAREN_R(")"),
+    BRACE_L("{"),
+    BRACE_R("}"),
+    BRACKET_L("["),
+    BRACKET_R("]"),
 
-    MINUSLT("->"),
-    MINUSLTSTAR("->*"),
-    DOT("."),
-    DOTSTAR(".*");
+    // Other operators
+    QUEST("?"),
+    ELLIPSIS("...");
 
     private final String value;
 

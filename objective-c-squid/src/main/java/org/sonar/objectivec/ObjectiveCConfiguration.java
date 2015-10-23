@@ -24,7 +24,6 @@ import org.sonar.squidbridge.api.SquidConfiguration;
 import java.nio.charset.Charset;
 
 public class ObjectiveCConfiguration extends SquidConfiguration {
-
     private boolean ignoreHeaderComments;
 
     public ObjectiveCConfiguration() {
@@ -39,8 +38,7 @@ public class ObjectiveCConfiguration extends SquidConfiguration {
         this.ignoreHeaderComments = ignoreHeaderComments;
     }
 
-    public boolean getIgnoreHeaderComments() {
+    public boolean isIgnoreHeaderComments() {
         return ignoreHeaderComments;
     }
-
 }

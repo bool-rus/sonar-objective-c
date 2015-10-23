@@ -19,6 +19,7 @@
  */
 package org.sonar.objectivec;
 
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
@@ -30,7 +31,6 @@ import org.sonar.objectivec.api.ObjectiveCMetric;
 import org.sonar.squidbridge.api.SourceFile;
 
 public class ObjectiveCAstScannerTest {
-
     @Test
     public void lines() {
         SourceFile file = ObjectiveCAstScanner.scanSingleFile(new File("src/test/resources/objcSample.h"));
@@ -40,7 +40,7 @@ public class ObjectiveCAstScannerTest {
     @Test
     public void lines_of_code() {
         SourceFile file = ObjectiveCAstScanner.scanSingleFile(new File("src/test/resources/objcSample.h"));
-        assertThat(file.getInt(ObjectiveCMetric.LINES_OF_CODE), is(5));
+        assertThat(file.getInt(ObjectiveCMetric.LINES_OF_CODE), is(4));
     }
 
     @Test
@@ -51,4 +51,12 @@ public class ObjectiveCAstScannerTest {
         assertThat(file.getNoSonarTagLines().size(), is(1));
     }
 
+    @Test
+    public void asdf() {
+        SourceFile file = ObjectiveCAstScanner.scanSingleFile(new File("src/test/resources/AFNetworkReachabilityManager.m"));
+        assertThat(file.getInt(ObjectiveCMetric.LINES), greaterThan(50));
+        for (ObjectiveCMetric value : ObjectiveCMetric.values()) {
+            System.out.println(value.getName() + " " + file.getDouble(value));
+        }
+    }
 }

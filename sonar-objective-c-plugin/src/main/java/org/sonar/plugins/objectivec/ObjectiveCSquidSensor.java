@@ -33,6 +33,8 @@ import org.sonar.api.component.ResourcePerspectives;
 import org.sonar.api.issue.Issuable;
 import org.sonar.api.issue.Issuable.IssueBuilder;
 import org.sonar.api.measures.CoreMetrics;
+import org.sonar.api.measures.PersistenceMode;
+import org.sonar.api.measures.RangeDistributionBuilder;
 import org.sonar.api.resources.Project;
 import org.sonar.api.resources.Resource;
 import org.sonar.api.rule.RuleKey;
@@ -48,7 +50,9 @@ import org.sonar.squidbridge.SquidAstVisitor;
 import org.sonar.squidbridge.api.CheckMessage;
 import org.sonar.squidbridge.api.SourceCode;
 import org.sonar.squidbridge.api.SourceFile;
+import org.sonar.squidbridge.api.SourceFunction;
 import org.sonar.squidbridge.checks.SquidCheck;
+import org.sonar.squidbridge.indexer.QueryByParent;
 import org.sonar.squidbridge.indexer.QueryByType;
 
 import javax.annotation.Nullable;
@@ -59,7 +63,11 @@ import java.util.Locale;
 
 
 public class ObjectiveCSquidSensor implements Sensor {
+    private static final Number[] FUNCTIONS_DISTRIB_BOTTOM_LIMITS = {1, 2, 4, 6, 8, 10, 12};
+    private static final Number[] FILES_DISTRIB_BOTTOM_LIMITS = {0, 5, 10, 20, 30, 60, 90};
+
     private SensorContext context;
+    private AstScanner<Grammar> scanner;
 
     private final Checks<SquidCheck<Grammar>> checks;
     private final FileSystem fileSystem;
@@ -85,13 +93,14 @@ public class ObjectiveCSquidSensor implements Sensor {
         return project.isRoot() && fileSystem.hasFiles(fileSystem.predicates().hasLanguage(ObjectiveC.KEY));
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void analyse(Project project, SensorContext context) {
         this.context = context;
 
         List<SquidAstVisitor<Grammar>> visitors = Lists.<SquidAstVisitor<Grammar>>newArrayList(checks.all());
 
-        @SuppressWarnings("unchecked") AstScanner<Grammar> scanner = ObjectiveCAstScanner.create(
+        scanner = ObjectiveCAstScanner.create(
                 createConfiguration(), new SonarComponents(resourcePerspectives, fileSystem),
                 visitors.toArray(new SquidAstVisitor[visitors.size()]));
 
@@ -112,13 +121,9 @@ public class ObjectiveCSquidSensor implements Sensor {
             String relativePath = pathResolver.relativePath(fileSystem.baseDir(), new File(squidFile.getKey()));
             InputFile inputFile = fileSystem.inputFile(fileSystem.predicates().hasRelativePath(relativePath));
 
-            /*
-             * Distribution is saved in the Lizard sensor and therefore it is not possible to save the complexity
-             * distribution here. The functionality has been moved to LizardParser.
-            */
-            //saveFilesComplexityDistribution(sonarFile, squidFile);
-            //saveFunctionsComplexityDistribution(sonarFile, squidFile);
             saveMeasures(inputFile, squidFile);
+            saveFilesComplexityDistribution(inputFile, squidFile);
+            saveFunctionsComplexityDistribution(inputFile, squidFile);
             saveViolations(inputFile, squidFile);
         }
     }
@@ -128,19 +133,25 @@ public class ObjectiveCSquidSensor implements Sensor {
         context.saveMeasure(inputFile, CoreMetrics.LINES, squidFile.getDouble(ObjectiveCMetric.LINES));
         context.saveMeasure(inputFile, CoreMetrics.NCLOC, squidFile.getDouble(ObjectiveCMetric.LINES_OF_CODE));
         context.saveMeasure(inputFile, CoreMetrics.COMMENT_LINES, squidFile.getDouble(ObjectiveCMetric.COMMENT_LINES));
-        /*
-         * Not implemented
-         */
-        //context.saveMeasure(inputFile, CoreMetrics.CLASSES, squidFile.getDouble(ObjectiveCMetric.CLASSES));
-        //context.saveMeasure(inputFile, CoreMetrics.STATEMENTS, squidFile.getDouble(ObjectiveCMetric.STATEMENTS));
-        /*
-         * Saving the same measure more than once per file throws  exception. That is why
-         * CoreMetrics.FUNCTIONS and CoreMetrics.COMPLEXITY are not allowed to be saved here. In order for the
-         * LizardSensor to be able to to its job and save the values for those metrics the functionality has been
-         * moved to Lizard classes.
-         */
-        //context.saveMeasure(inputFile, CoreMetrics.FUNCTIONS, squidFile.getDouble(ObjectiveCMetric.FUNCTIONS));
-        //context.saveMeasure(inputFile, CoreMetrics.COMPLEXITY, squidFile.getDouble(ObjectiveCMetric.COMPLEXITY));
+        context.saveMeasure(inputFile, CoreMetrics.CLASSES, squidFile.getDouble(ObjectiveCMetric.CLASSES));
+        context.saveMeasure(inputFile, CoreMetrics.FUNCTIONS, squidFile.getDouble(ObjectiveCMetric.FUNCTIONS));
+        context.saveMeasure(inputFile, CoreMetrics.STATEMENTS, squidFile.getDouble(ObjectiveCMetric.STATEMENTS));
+        context.saveMeasure(inputFile, CoreMetrics.COMPLEXITY, squidFile.getDouble(ObjectiveCMetric.COMPLEXITY));
+    }
+
+    private void saveFunctionsComplexityDistribution(InputFile inputFile, SourceFile squidFile) {
+        Collection<SourceCode> squidFunctionsInFile = scanner.getIndex().search(new QueryByParent(squidFile), new QueryByType(SourceFunction.class));
+        RangeDistributionBuilder complexityDistribution = new RangeDistributionBuilder(CoreMetrics.FUNCTION_COMPLEXITY_DISTRIBUTION, FUNCTIONS_DISTRIB_BOTTOM_LIMITS);
+        for (SourceCode squidFunction : squidFunctionsInFile) {
+            complexityDistribution.add(squidFunction.getDouble(ObjectiveCMetric.COMPLEXITY));
+        }
+        context.saveMeasure(inputFile, complexityDistribution.build().setPersistenceMode(PersistenceMode.MEMORY));
+    }
+
+    private void saveFilesComplexityDistribution(InputFile inputFile, SourceFile squidFile) {
+        RangeDistributionBuilder complexityDistribution = new RangeDistributionBuilder(CoreMetrics.FILE_COMPLEXITY_DISTRIBUTION, FILES_DISTRIB_BOTTOM_LIMITS);
+        complexityDistribution.add(squidFile.getDouble(ObjectiveCMetric.COMPLEXITY));
+        context.saveMeasure(inputFile, complexityDistribution.build().setPersistenceMode(PersistenceMode.MEMORY));
     }
 
     private void saveViolations(@Nullable InputFile inputFile, SourceFile squidFile) {

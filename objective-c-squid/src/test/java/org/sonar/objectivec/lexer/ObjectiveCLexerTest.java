@@ -34,9 +34,9 @@ import com.sonar.sslr.api.GenericTokenType;
 import com.sonar.sslr.api.Token;
 import com.sonar.sslr.impl.Lexer;
 import org.sonar.objectivec.api.ObjectiveCKeyword;
+import org.sonar.objectivec.api.ObjectiveCPunctuator;
 
 public class ObjectiveCLexerTest {
-
     private static Lexer lexer;
 
     @BeforeClass
@@ -64,7 +64,12 @@ public class ObjectiveCLexerTest {
 
     @Test
     public void lexLineOfCode() {
-        assertThat(lexer.lex("[self init];"), hasToken("self", ObjectiveCKeyword.SELF));
+        List<Token> tokens = lexer.lex("[self init];");
+        assertThat(tokens, hasToken(ObjectiveCPunctuator.BRACKET_L));
+        assertThat(tokens, hasToken(ObjectiveCKeyword.SELF));
+        assertThat(tokens, hasToken(GenericTokenType.IDENTIFIER));
+        assertThat(tokens, hasToken(ObjectiveCPunctuator.BRACKET_R));
+        assertThat(tokens, hasToken(ObjectiveCPunctuator.SEMICOLON));
     }
 
     @Test
@@ -77,8 +82,7 @@ public class ObjectiveCLexerTest {
     @Test
     public void lexSampleFile() {
         List<Token> tokens = lexer.lex(new File("src/test/resources/objcSample.h"));
-        assertThat(tokens.size(), equalTo(26));
+        assertThat(tokens.size(), equalTo(18));
         assertThat(tokens, hasToken(GenericTokenType.EOF));
     }
-
 }
