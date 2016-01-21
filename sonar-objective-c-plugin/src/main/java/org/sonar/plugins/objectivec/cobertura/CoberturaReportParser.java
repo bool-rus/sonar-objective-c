@@ -26,9 +26,11 @@ import org.codehaus.staxmate.in.SMInputCursor;
 import org.sonar.api.batch.SensorContext;
 import org.sonar.api.batch.fs.FileSystem;
 import org.sonar.api.batch.fs.InputFile;
+import org.sonar.api.measures.CoreMetrics;
 import org.sonar.api.measures.CoverageMeasuresBuilder;
 import org.sonar.api.measures.Measure;
 import org.sonar.api.resources.Resource;
+import org.sonar.api.utils.KeyValueFormat;
 import org.sonar.api.utils.ParsingUtils;
 import org.sonar.api.utils.StaxParser;
 import org.sonar.api.utils.XmlParserException;
@@ -38,6 +40,7 @@ import java.io.File;
 import java.text.ParseException;
 import java.util.Locale;
 import java.util.Map;
+import java.util.SortedMap;
 
 final class CoberturaReportParser {
     private final FileSystem fileSystem;
@@ -81,8 +84,11 @@ final class CoberturaReportParser {
                 final Resource resource = inputFile == null ? null : context.getResource(inputFile);
 
                 if (resource != null) {
-                    for (Measure measure : entry.getValue().createMeasures()) {
+                    CoverageMeasuresBuilder builder = entry.getValue();
+                    for (Measure measure : builder.createMeasures()) {
                         context.saveMeasure(resource, measure);
+                        context.saveMeasure(resource, zeroForIt(builder, measure));
+                        context.saveMeasure(resource, convertForOverall(measure));
                     }
                 }
             }
@@ -122,5 +128,53 @@ final class CoberturaReportParser {
                 builder.setConditions(lineId, Integer.parseInt(conditions[1]), Integer.parseInt(conditions[0]));
             }
         }
+    }
+
+    private static Measure zeroForIt(CoverageMeasuresBuilder builder, Measure measure) {
+        Measure itMeasure = null;
+        if (CoreMetrics.LINES_TO_COVER.equals(measure.getMetric())) {
+            itMeasure = new Measure(CoreMetrics.IT_LINES_TO_COVER, measure.getValue());
+        } else if (CoreMetrics.UNCOVERED_LINES.equals(measure.getMetric())) {
+            itMeasure = new Measure(CoreMetrics.IT_UNCOVERED_LINES, (double) builder.getLinesToCover());
+        } else if (CoreMetrics.COVERAGE_LINE_HITS_DATA.equals(measure.getMetric())) {
+            SortedMap<Integer, Integer> map = Maps.newTreeMap();
+            for (Integer line : builder.getHitsByLine().keySet()) {
+                map.put(line, 0);
+            }
+            itMeasure = new Measure(CoreMetrics.IT_COVERAGE_LINE_HITS_DATA, KeyValueFormat.format(map));
+        } else if (CoreMetrics.CONDITIONS_TO_COVER.equals(measure.getMetric())) {
+            itMeasure = new Measure(CoreMetrics.IT_CONDITIONS_TO_COVER, measure.getValue());
+        } else if (CoreMetrics.UNCOVERED_CONDITIONS.equals(measure.getMetric())) {
+            itMeasure = new Measure(CoreMetrics.IT_UNCOVERED_CONDITIONS, (double) builder.getConditions());
+        } else if (CoreMetrics.COVERED_CONDITIONS_BY_LINE.equals(measure.getMetric())) {
+            SortedMap<Integer, Integer> map = Maps.newTreeMap();
+            for (Integer line : builder.getCoveredConditionsByLine().keySet()) {
+                map.put(line, 0);
+            }
+            itMeasure = new Measure(CoreMetrics.IT_COVERED_CONDITIONS_BY_LINE, KeyValueFormat.format(map));
+        } else if (CoreMetrics.CONDITIONS_BY_LINE.equals(measure.getMetric())) {
+            itMeasure = new Measure(CoreMetrics.IT_CONDITIONS_BY_LINE, measure.getData());
+        }
+        return itMeasure;
+    }
+
+    private static Measure convertForOverall(Measure measure) {
+        Measure overallMeasure = null;
+        if (CoreMetrics.LINES_TO_COVER.equals(measure.getMetric())) {
+            overallMeasure = new Measure(CoreMetrics.OVERALL_LINES_TO_COVER, measure.getValue());
+        } else if (CoreMetrics.UNCOVERED_LINES.equals(measure.getMetric())) {
+            overallMeasure = new Measure(CoreMetrics.OVERALL_UNCOVERED_LINES, measure.getValue());
+        } else if (CoreMetrics.COVERAGE_LINE_HITS_DATA.equals(measure.getMetric())) {
+            overallMeasure = new Measure(CoreMetrics.OVERALL_COVERAGE_LINE_HITS_DATA, measure.getData());
+        } else if (CoreMetrics.CONDITIONS_TO_COVER.equals(measure.getMetric())) {
+            overallMeasure = new Measure(CoreMetrics.OVERALL_CONDITIONS_TO_COVER, measure.getValue());
+        } else if (CoreMetrics.UNCOVERED_CONDITIONS.equals(measure.getMetric())) {
+            overallMeasure = new Measure(CoreMetrics.OVERALL_UNCOVERED_CONDITIONS, measure.getValue());
+        } else if (CoreMetrics.COVERED_CONDITIONS_BY_LINE.equals(measure.getMetric())) {
+            overallMeasure = new Measure(CoreMetrics.OVERALL_COVERED_CONDITIONS_BY_LINE, measure.getData());
+        } else if (CoreMetrics.CONDITIONS_BY_LINE.equals(measure.getMetric())) {
+            overallMeasure = new Measure(CoreMetrics.OVERALL_CONDITIONS_BY_LINE, measure.getData());
+        }
+        return overallMeasure;
     }
 }
