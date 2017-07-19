@@ -28,12 +28,15 @@ import org.xml.sax.SAXException;
 
 import javax.xml.parsers.ParserConfigurationException;
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * @author Matthew DeTullio
@@ -48,11 +51,11 @@ public final class ClangPlistParser {
     public static List<ClangWarning> parse(final File reportsDir) {
         List<ClangWarning> result = new ArrayList<>();
 
-        File[] reports = getReports(reportsDir);
+        List<Path> reports = getReports(reportsDir);
 
-        for (File report : reports) {
+        for (Path reportPath : reports) {
             try {
-                result.addAll(parsePlist(report));
+                result.addAll(parsePlist(reportPath.toFile()));
             } catch (Exception e) {
                 throw new XmlParserException("Unable to parse Clang reports", e);
             }
@@ -61,17 +64,19 @@ public final class ClangPlistParser {
         return result;
     }
 
-    private static File[] getReports(final File reportsDir) {
-        if (!reportsDir.isDirectory() || !reportsDir.exists()) {
-            return new File[0];
+    private static List<Path> getReports(final File reportsDir) {
+        try {
+            return Files.walk(Paths.get(reportsDir.getPath())).
+                    filter(Files::isRegularFile).
+                    filter(ClangPlistParser::isPlistFile).
+                    collect(Collectors.toList());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
+    }
 
-        return reportsDir.listFiles(new FilenameFilter() {
-            @Override
-            public boolean accept(File dir, String name) {
-                return name.endsWith(".plist");
-            }
-        });
+    private static boolean isPlistFile(Path path) {
+        return path.getFileName().toString().endsWith(".plist");
     }
 
     @SuppressWarnings("unchecked")

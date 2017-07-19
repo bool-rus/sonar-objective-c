@@ -10,6 +10,7 @@
 
     <artifactId>sonar-objective-c-plugin</artifactId>
     <packaging>sonar-plugin</packaging>
+    <version>0.5.2</version>
 
     <name>SonarQube Objective-C (Community) Plugin</name>
     <description>Enable analysis and reporting on Objective-C projects.</description>
@@ -23,6 +24,17 @@
         <sonar.pluginName>Objective-C (Community)</sonar.pluginName>
     </properties>
 
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
     <dependencies>
         <dependency>
             <groupId>org.codehaus.sonar</groupId>
@@ -32,7 +44,7 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>objective-c-squid</artifactId>
-            <version>${project.version}</version>
+            <version>${parent.version}</version>
         </dependency>
         <dependency>
             <groupId>com.googlecode.plist</groupId>
