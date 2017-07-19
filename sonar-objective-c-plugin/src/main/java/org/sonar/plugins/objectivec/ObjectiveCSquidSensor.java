@@ -82,7 +82,7 @@ public class ObjectiveCSquidSensor implements Sensor {
 
     @Override
     public boolean shouldExecuteOnProject(Project project) {
-        return project.isRoot() && fileSystem.hasFiles(fileSystem.predicates().hasLanguage(ObjectiveC.KEY));
+        return fileSystem.hasFiles(fileSystem.predicates().hasLanguage(ObjectiveC.KEY));
     }
 
     @Override
